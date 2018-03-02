@@ -173,12 +173,13 @@ def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.3):
 
 
 class Sort(object):
-  def __init__(self,max_age=1,min_hits=3):
+  def __init__(self,max_age=1,min_hits=3,iou_threshold=0.3):
     """
     Sets key parameters for SORT
     """
     self.max_age = max_age
     self.min_hits = min_hits
+    self.iou_threshold = iou_threshold
     self.trackers = []
     self.frame_count = 0
 
@@ -204,7 +205,7 @@ class Sort(object):
     trks = np.ma.compress_rows(np.ma.masked_invalid(trks))
     for t in reversed(to_del):
       self.trackers.pop(t)
-    matched, unmatched_dets, unmatched_trks = associate_detections_to_trackers(dets,trks)
+    matched, unmatched_dets, unmatched_trks = associate_detections_to_trackers(dets,trks, self.iou_threshold)
 
     #update matched trackers with assigned detections
     for t,trk in enumerate(self.trackers):
@@ -233,13 +234,14 @@ def parse_args():
     """Parse input arguments."""
     parser = argparse.ArgumentParser(description='SORT demo')
     parser.add_argument('--display', dest='display', help='Display online tracker output (slow) [False]',action='store_true')
+    parser.add_argument('--input_file', dest='input_file', help='File to process (required)', required=True)
     args = parser.parse_args()
     return args
 
 if __name__ == '__main__':
   # all train
-  sequences = ['PETS09-S2L1','TUD-Campus','TUD-Stadtmitte','ETH-Bahnhof','ETH-Sunnyday','ETH-Pedcross2','KITTI-13','KITTI-17','ADL-Rundle-6','ADL-Rundle-8','Venice-2']
   args = parse_args()
+  input_sequence = args.input_file
   display = args.display
   phase = 'train'
   total_time = 0.0
@@ -255,40 +257,41 @@ if __name__ == '__main__':
   if not os.path.exists('output'):
     os.makedirs('output')
   
-  for seq in sequences:
-    mot_tracker = Sort() #create instance of the SORT tracker
-    seq_dets = np.loadtxt('data/%s/det.txt'%(seq),delimiter=',') #load detections
-    with open('output/%s.txt'%(seq),'w') as out_file:
-      print("Processing %s."%(seq))
-      for frame in range(int(seq_dets[:,0].max())):
-        frame += 1 #detection and frame numbers begin at 1
-        dets = seq_dets[seq_dets[:,0]==frame,2:7]
-        dets[:,2:4] += dets[:,0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
-        total_frames += 1
+  mot_tracker = Sort(max_age=10, iou_threshold=0.3) #create instance of the SORT tracker
+  seq_dets = np.loadtxt(input_sequence, delimiter=',') #load detections
+  output_file = input_sequence.split('/')[-1]
+  with open('output/%s' % output_file, 'w') as out_file:
+    for frame in range(int(seq_dets[:,0].max())):
+      if frame % 1000 == 0:
+          print(frame)
+      frame += 1 #detection and frame numbers begin at 1
+      dets = seq_dets[seq_dets[:,0]==frame,2:7]
+      dets[:,2:4] += dets[:,0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
+      total_frames += 1
 
-        if(display):
-          ax1 = fig.add_subplot(111, aspect='equal')
-          fn = 'mot_benchmark/%s/%s/img1/%06d.jpg'%(phase,seq,frame)
-          im =io.imread(fn)
-          ax1.imshow(im)
-          plt.title(seq+' Tracked Targets')
+      # if(display):
+      #   ax1 = fig.add_subplot(111, aspect='equal')
+      #   fn = 'mot_benchmark/%s/%s/img1/%06d.jpg'%(phase,seq,frame)
+      #   im =io.imread(fn)
+      #   ax1.imshow(im)
+      #   plt.title(seq+' Tracked Targets')
 
-        start_time = time.time()
-        trackers = mot_tracker.update(dets)
-        cycle_time = time.time() - start_time
-        total_time += cycle_time
+      start_time = time.time()
+      trackers = mot_tracker.update(dets)
+      cycle_time = time.time() - start_time
+      total_time += cycle_time
 
-        for d in trackers:
-          print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1'%(frame,d[4],d[0],d[1],d[2]-d[0],d[3]-d[1]),file=out_file)
-          if(display):
-            d = d.astype(np.int32)
-            ax1.add_patch(patches.Rectangle((d[0],d[1]),d[2]-d[0],d[3]-d[1],fill=False,lw=3,ec=colours[d[4]%32,:]))
-            ax1.set_adjustable('box-forced')
+      for d in trackers:
+        print('%d,%d,%.5f,%.5f,%.5f,%.5f,1,-1,-1,-1'%(frame,d[4],d[0],d[1],d[2]-d[0],d[3]-d[1]),file=out_file)
+        # if(display):
+        #   d = d.astype(np.int32)
+        #   ax1.add_patch(patches.Rectangle((d[0],d[1]),d[2]-d[0],d[3]-d[1],fill=False,lw=3,ec=colours[d[4]%32,:]))
+        #   ax1.set_adjustable('box-forced')
 
-        if(display):
-          fig.canvas.flush_events()
-          plt.draw()
-          ax1.cla()
+      # if(display):
+      #   fig.canvas.flush_events()
+      #   plt.draw()
+      #   ax1.cla()
 
   print("Total Tracking took: %.3f for %d frames or %.1f FPS"%(total_time,total_frames,total_frames/total_time))
   if(display):
