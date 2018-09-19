@@ -94,6 +94,7 @@ class KalmanBoxTracker(object):
 
     self.kf.x[:4] = convert_bbox_to_z(bbox)
     self.score = bbox[4]
+    self.update_history = [bbox]
     self.time_since_update = 0
     self.id = KalmanBoxTracker.count
     KalmanBoxTracker.count += 1
@@ -111,6 +112,7 @@ class KalmanBoxTracker(object):
     self.hits += 1
     self.hit_streak += 1
     self.kf.update(convert_bbox_to_z(bbox))
+    self.update_history.append(bbox)
 
   def predict(self):
     """
@@ -130,7 +132,8 @@ class KalmanBoxTracker(object):
     """
     Returns the current bounding box estimate.
     """
-    return convert_x_to_bbox(self.kf.x, score=self.score)
+    # return convert_x_to_bbox(self.kf.x, score=self.score)
+    return self.update_history[-1].reshape(1, -1)
 
 def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.3):
   """
@@ -262,7 +265,7 @@ if __name__ == '__main__':
   seq_dets = np.loadtxt(input_sequence, delimiter=',') #load detections
   output_file = input_sequence.split('/')[-1]
   with open('output/%s' % output_file, 'w') as out_file:
-    print('frame_no,obj_id,xmin,ymin,xmax,ymax,conf',file=out_file)
+    print('frame_no,ymin,xmin,ymax,xmax,conf,obj_id',file=out_file)
     for frame in range(int(seq_dets[:,0].max())):
       if frame % 1000 == 0:
           print(frame)
@@ -284,7 +287,7 @@ if __name__ == '__main__':
       total_time += cycle_time
 
       for d in trackers:
-        print('%d,%d,%.5f,%.5f,%.5f,%.5f,%.5f'%(frame,d[5],d[0],d[1],d[2],d[3],d[4]),file=out_file)
+        print('%d,%.5f,%.5f,%.5f,%.5f,%.5f,%d'%(frame,d[0],d[2],d[1],d[4],d[3],d[5]),file=out_file)
         # if(display):
         #   d = d.astype(np.int32)
         #   ax1.add_patch(patches.Rectangle((d[0],d[1]),d[2]-d[0],d[3]-d[1],fill=False,lw=3,ec=colours[d[4]%32,:]))
