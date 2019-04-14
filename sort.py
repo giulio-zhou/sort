@@ -94,7 +94,8 @@ class KalmanBoxTracker(object):
 
     self.kf.x[:4] = convert_bbox_to_z(bbox)
     self.score = bbox[4]
-    self.update_history = [bbox]
+    self.state_history = [bbox]
+    self.bbox_history = [bbox]
     self.time_since_update = 0
     self.id = KalmanBoxTracker.count
     KalmanBoxTracker.count += 1
@@ -112,7 +113,7 @@ class KalmanBoxTracker(object):
     self.hits += 1
     self.hit_streak += 1
     self.kf.update(convert_bbox_to_z(bbox))
-    self.update_history.append(bbox)
+    self.bbox_history.append(bbox)
 
   def predict(self):
     """
@@ -126,14 +127,17 @@ class KalmanBoxTracker(object):
       self.hit_streak = 0
     self.time_since_update += 1
     self.history.append(convert_x_to_bbox(self.kf.x))
+    self.state_history.append(self.history[-1])
     return self.history[-1]
 
   def get_state(self):
     """
     Returns the current bounding box estimate.
     """
-    # return convert_x_to_bbox(self.kf.x, score=self.score)
-    return self.update_history[-1].reshape(1, -1)
+    if self.bbox_history[-1] is not None:
+        return self.bbox_history[-1].reshape(1, -1)
+    else:
+        return convert_x_to_bbox(self.kf.x, score=self.score)
 
 def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.3):
   """
